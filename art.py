@@ -58,7 +58,7 @@ def AR4Decode(image):
         return int("".join([br, tr, tl, bl]), 2), 90
     elif croppedImage[15, 15] == white:
         return int("".join([tr, tl, bl, br]), 2), 180
-    elif croppedImage[85, 85] == white:
+    elif croppedImage[85, 15] == white:
         return int("".join([tl ,bl, br, tr]), 2), -90
     else:
         return None, None
@@ -97,7 +97,7 @@ def orderCorners(points):
     
     return rectangle
 
-# Takes an image, and returns two arrays; The exterior corners, and interior corners of the Tag.
+# Takes an image, and returns the exterior corners
 def findContours(frame):
     #Convert Input Image to grayscale
     grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -131,11 +131,11 @@ def findContours(frame):
             otags.append(outerCorners)
     
     # Just to be sure, we will make sure all our tags have 4 corners, and are no bigger than a experimental constant
-    finaloTagCorners = []
+    tagCorners = []
     for corners in otags:
         if len(corners) == 4:
             area = cv2.contourArea(corners)
             if area > 300:
-                finaloTagCorners.append(corners)
+                tagCorners.append(corners)
     
-    return finaloTagCorners
+    return tagCorners
