@@ -9,8 +9,28 @@ CAMERAFRAME = np.array([
     [FRAMESIZE-1, FRAMESIZE-1],
     [0, FRAMESIZE-1]], dtype="float32")
 
-# Returns list of visible tag IDs in an Image
-def simpleLocateTags(frame, drawOutline=False, drawZoom=False):
+# Returns a list of tuples, each with the detected tag ID, and its 4 corners on the camera image
+def findTags(frame):
+    tagCorners = findContours(frame) # The outer corners of the tags
+    
+    found = []
+    
+    for corners in tagCorners:
+        # Get the corners, and find the homography matrix
+        c_rez = corners[:, 0]
+        H_matrix = homograph(CAMERAFRAME, orderCorners(c_rez))
+        # Apply homography matrix and colour change
+        tag = cv2.warpPerspective(frame, H_matrix, (200, 200))
+        tag1 = cv2.cvtColor(tag, cv2.COLOR_BGR2GRAY)
+        # Get tag ID and Orientation. If these are none, we can ignore the detection
+        decode, orientation = AR4Decode(tag1)
+        if orientation != None and decode != None:
+            found.append((decode, orderCorners(c_rez)))
+    
+    return found
+
+# Displays image with detected tags highlighted and their IDs displayed
+def highlightTags(frame):
     tagCorners = findContours(frame) # The outer corners of the tags
     out = frame.copy()
     
@@ -29,12 +49,11 @@ def simpleLocateTags(frame, drawOutline=False, drawZoom=False):
             rotationMat = cv2.getRotationMatrix2D((100, 100), -orientation, 1.0)
             tag2 = cv2.warpAffine(tag1, rotationMat, tag1.shape[1::-1], flags=cv2.INTER_LINEAR)
         
-            if drawZoom:
-                t, zim = cv2.threshold(tag2, 150, 255, cv2.THRESH_BINARY)
-                cv2.imshow(f"Zoomed Tag", zim)
-            if drawOutline:
-                cv2.putText(out, f"{decode}", c_rez[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-                cv2.drawContours(out, [corners], -1, (0,255,0), 2)
+            t, zim = cv2.threshold(tag2, 150, 255, cv2.THRESH_BINARY)
+            cv2.imshow(f"Zoomed Tag ~{decode}", zim)
+            
+            cv2.putText(out, f"{decode}", c_rez[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+            cv2.drawContours(out, [corners], -1, (0,255,0), 2)
     
     
     cv2.imshow("Outline", out)
@@ -46,6 +65,7 @@ def AR4Decode(image):
     croppedImage = image_bw[50:150, 50:150] #Crop exterior black parts
     
     #Find middle pixel of each one of the ID pixels. We can then check the colour to extract the ID
+    # TODO use average value of ID pixel for more reliable ID
     tl = '0' if croppedImage[37,37] == 255 else '1'
     bl = '0' if croppedImage[62,37] == 255 else '1'
     tr = '0' if croppedImage[37,62] == 255 else '1'
@@ -83,7 +103,7 @@ def homograph(p, p1):
 
 # Returns the order of points in the camera frame
 def orderCorners(points):
-    rectangle = np.zeros((4,2), dtype="float32")
+    rectangle = np.zeros((4,2), dtype="int32")
     
     pSum = points.sum(axis=1)
     

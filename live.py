@@ -12,11 +12,13 @@ while True:
 
     if result:
         
-        art.simpleLocateTags(image, True, True)
+        tags = art.findTags(image)
+        for tagvalue, corners in tags:
+            
+            cv2.polylines(image, [corners], True, (50,0,200), 2)
+            cv2.putText(image, f"{tagvalue}", corners[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
         
-        # cv2.drawContours(image, tagCor, -1, (50,0,200), 2)
-        
-        # cv2.imshow("cam", image)
+        cv2.imshow("cam", image)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
