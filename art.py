@@ -12,24 +12,32 @@ CAMERAFRAME = np.array([
 # Returns list of visible tag IDs in an Image
 def simpleLocateTags(frame, drawOutline=False, drawZoom=False):
     tagCorners = findContours(frame) # The outer corners of the tags
+    out = frame.copy()
     
-    for i in range(len(tagCorners)):
-        
-        c_rez = tagCorners[i][:, 0]
-        print(c_rez)
+    for corners in tagCorners:
+        # Get the corners, and find the homography matrix
+        c_rez = corners[:, 0]
         H_matrix = homograph(CAMERAFRAME, orderCorners(c_rez))
-        
+        # Apply homography matrix and colour change
         tag = cv2.warpPerspective(frame, H_matrix, (200, 200))
-        
         tag1 = cv2.cvtColor(tag, cv2.COLOR_BGR2GRAY)
-        decoded = AR4Decode(tag1)
+        # Get tag ID and Orientation. If these are none, we can ignore the detection
+        decode, orientation = AR4Decode(tag1)
         
-        if drawZoom:
-            cv2.imshow(f"Zoomed Tag", tag)
-        if drawOutline:
-            cv2.putText(frame, f"{decoded}", c_rez[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-            cv2.drawContours(frame, [tagCorners[i]], -1, (0,255,0), 2)
-            cv2.imshow("Outline", frame)
+        if orientation != None and decode != None:
+            #We want to make sure we are always looking the right way up!
+            rotationMat = cv2.getRotationMatrix2D((100, 100), -orientation, 1.0)
+            tag2 = cv2.warpAffine(tag1, rotationMat, tag1.shape[1::-1], flags=cv2.INTER_LINEAR)
+        
+            if drawZoom:
+                t, zim = cv2.threshold(tag2, 150, 255, cv2.THRESH_BINARY)
+                cv2.imshow(f"Zoomed Tag", zim)
+            if drawOutline:
+                cv2.putText(out, f"{decode}", c_rez[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+                cv2.drawContours(out, [corners], -1, (0,255,0), 2)
+    
+    
+    cv2.imshow("Outline", out)
 
 # Decodes the tags ID. Returns value of tag and the Orientation
 def AR4Decode(image):
@@ -45,15 +53,15 @@ def AR4Decode(image):
     
     # Now that we have the values, we need to find the orientation to get the correct ID value
     if croppedImage[85, 85] == white:
-        return int("".join([bl, br, tr, tl]), 2)
+        return int("".join([bl, br, tr, tl]), 2), 0
     elif croppedImage[15, 85] == white:
-        return int("".join([br, tr, tl, bl]), 2)
+        return int("".join([br, tr, tl, bl]), 2), 90
     elif croppedImage[15, 15] == white:
-        return int("".join([tr, tl, bl, br]), 2)
+        return int("".join([tr, tl, bl, br]), 2), 180
     elif croppedImage[85, 85] == white:
-        return int("".join([tl ,bl, br, tr]), 2)
+        return int("".join([tl ,bl, br, tr]), 2), -90
     else:
-        return None
+        return None, None
 
 # Computers the Homography Matrix between world and camera frame
 def homograph(p, p1):
@@ -127,7 +135,7 @@ def findContours(frame):
     for corners in otags:
         if len(corners) == 4:
             area = cv2.contourArea(corners)
-            if area > 100:
+            if area > 300:
                 finaloTagCorners.append(corners)
     
     return finaloTagCorners
