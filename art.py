@@ -1,8 +1,10 @@
 import numpy as np
 import cv2
 
-# The camera frame size and points
-FRAMESIZE = 200
+# The tag frame size 
+FRAMESIZE = 480
+PIXELSIZE = 40
+# Camera Frame Size
 CAMERAFRAME = np.array([
     [0,0],
     [FRAMESIZE-1, 0],
@@ -10,7 +12,7 @@ CAMERAFRAME = np.array([
     [0, FRAMESIZE-1]], dtype="float32")
 
 # Returns a list of tuples, each with the detected tag ID, and its 4 corners on the camera image
-def findTags(frame):
+def findTags(frame, tagSize=FRAMESIZE-PIXELSIZE*2):
     tagCorners = findContours(frame) # The outer corners of the tags
     
     found = []
@@ -20,7 +22,7 @@ def findTags(frame):
         c_rez = corners[:, 0]
         H_matrix = homograph(CAMERAFRAME, orderCorners(c_rez))
         # Apply homography matrix and colour change
-        tag = cv2.warpPerspective(frame, H_matrix, (200, 200))
+        tag = cv2.warpPerspective(frame, H_matrix, (tagSize, tagSize))
         tag1 = cv2.cvtColor(tag, cv2.COLOR_BGR2GRAY)
         # Get tag ID and Orientation. If these are none, we can ignore the detection
         decode, orientation = AR4Decode(tag1)
@@ -30,7 +32,7 @@ def findTags(frame):
     return found
 
 # Displays image with detected tags highlighted and their IDs displayed
-def highlightTags(frame):
+def highlightTags(frame, tagSize=FRAMESIZE):
     tagCorners = findContours(frame) # The outer corners of the tags
     out = frame.copy()
     
@@ -39,17 +41,17 @@ def highlightTags(frame):
         c_rez = corners[:, 0]
         H_matrix = homograph(CAMERAFRAME, orderCorners(c_rez))
         # Apply homography matrix and colour change
-        tag = cv2.warpPerspective(frame, H_matrix, (200, 200))
+        tag = cv2.warpPerspective(frame, H_matrix, (tagSize, tagSize))
         tag1 = cv2.cvtColor(tag, cv2.COLOR_BGR2GRAY)
         # Get tag ID and Orientation. If these are none, we can ignore the detection
         decode, orientation = AR4Decode(tag1)
         
         if orientation != None and decode != None:
             #We want to make sure we are always looking the right way up!
-            rotationMat = cv2.getRotationMatrix2D((100, 100), -orientation, 1.0)
+            rotationMat = cv2.getRotationMatrix2D((tagSize//2, tagSize//2), -orientation, 1.0)
             tag2 = cv2.warpAffine(tag1, rotationMat, tag1.shape[1::-1], flags=cv2.INTER_LINEAR)
         
-            t, zim = cv2.threshold(tag2, 150, 255, cv2.THRESH_BINARY)
+            t, zim = cv2.threshold(tag2, 180, 255, cv2.THRESH_BINARY)
             cv2.imshow(f"Zoomed Tag ~{decode}", zim)
             
             cv2.putText(out, f"{decode}", c_rez[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
@@ -60,28 +62,54 @@ def highlightTags(frame):
 
 # Decodes the tags ID. Returns value of tag and the Orientation
 def AR4Decode(image):
-    ret, image_bw = cv2.threshold(image, 200, 255, cv2.THRESH_BINARY) #Apply threshold for binary image
+    def calvalue(pixels): #Calculates the total value of the ID in the correct orientation
+        total = 0
+        for i in range(4):
+            for j in range(4):
+                if pixels[i][j] != 255: #Not White
+                    print(i*4 + j)
+                    total += 2**(15 - (i*4 + j))
+        return total
+
+    ret, image_bw = cv2.threshold(image, 200, 255, cv2.THRESH_BINARY) #Apply threshold for binary image. Result is black/white
     white = 255 #Bottom left corner should be white
-    croppedImage = image_bw[50:150, 50:150] #Crop exterior black parts
+    border = int(PIXELSIZE*2)
+    croppedImage = image_bw[border:FRAMESIZE-border, border:FRAMESIZE-border] #Crop exterior black parts
     
+    # First we want to find the orientation pixels
+    l = int(PIXELSIZE)
+    h = int(PIXELSIZE*7)
+
+    if croppedImage[h, h] == white: ##Normal way up!
+        pass 
+    elif croppedImage[l, h] == white:
+        croppedImage = cv2.rotate(croppedImage, cv2.ROTATE_90_CLOCKWISE)
+    elif croppedImage[l, l] == white:
+        croppedImage = cv2.rotate(croppedImage, cv2.ROTATE_180)
+    elif croppedImage[h, l] == white:
+        croppedImage = cv2.rotate(croppedImage, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    else:
+        return None, None   
+    
+    #showImage = croppedImage.copy()
+
     #Find middle pixel of each one of the ID pixels. We can then check the colour to extract the ID
     # TODO use average value of ID pixel for more reliable ID
-    tl = '0' if croppedImage[37,37] == 255 else '1'
-    bl = '0' if croppedImage[62,37] == 255 else '1'
-    tr = '0' if croppedImage[37,62] == 255 else '1'
-    br = '0' if croppedImage[62,62] == 255 else '1'
+    pixelValss = []
+    for i in range(4):
+        row = []
+        for j in range(4):
+            x = int((PIXELSIZE)*(i+2.5))
+            y = int((PIXELSIZE)*(j+2.5))
+            row.append(croppedImage[x,y])
+            #cv2.circle(showImage,(x,y), 2, (0,255,0), -1)
+        
+        pixelValss.append(row)
     
-    # Now that we have the values, we need to find the orientation to get the correct ID value
-    if croppedImage[85, 85] == white:
-        return int("".join([bl, br, tr, tl]), 2), 0
-    elif croppedImage[15, 85] == white:
-        return int("".join([br, tr, tl, bl]), 2), 90
-    elif croppedImage[15, 15] == white:
-        return int("".join([tr, tl, bl, br]), 2), 180
-    elif croppedImage[85, 15] == white:
-        return int("".join([tl ,bl, br, tr]), 2), -90
-    else:
-        return None, None
+    #cv2.imshow(".", showImage)
+
+    v = calvalue(pixelValss)
+    return v, ord
 
 # Computers the Homography Matrix between world and camera frame
 def homograph(p, p1):
@@ -123,7 +151,7 @@ def findContours(frame):
     grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     #Apply Gaussian Blur & Canny Edge Detection
     blur = cv2.GaussianBlur(grey, (5,5), 0)
-    edge = cv2.Canny(blur, 75, 200)
+    edge = cv2.Canny(blur, 100, 200)
     
     # Use cv2 to find all contours
     conts, h = cv2.findContours(edge, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
