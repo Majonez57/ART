@@ -38,7 +38,7 @@ def AR4Decode(image):
         for i in range(4):
             for j in range(4):
                 if pixels[i][j] != 255: #Not White
-                    print(i*4 + j)
+                    
                     total += 2**(15 - (i*4 + j))
         return total
 
@@ -47,6 +47,8 @@ def AR4Decode(image):
     border = int(PIXELSIZE*2)
     croppedImage = image_bw[border:FRAMESIZE-border, border:FRAMESIZE-border] #Crop exterior black parts
     
+    cv2.imshow("#", croppedImage)
+    
     # First we want to find the orientation pixels
     l = int(PIXELSIZE*.5)
     h = int(PIXELSIZE*5.5)
@@ -54,17 +56,24 @@ def AR4Decode(image):
     if croppedImage[h, h] == white: ##Normal way up!
         ori = 0
     elif croppedImage[l, h] == white:
-        ori = 90
+        ori = -90
     elif croppedImage[l, l] == white:
         ori = 180
     elif croppedImage[h, l] == white:
-        ori = -90
+        ori = 90
     else:
         return None, None   
+    
+    print(ori)
     
     rotationMat = cv2.getRotationMatrix2D((120, 120), ori, 1.0)
     croppedImage = cv2.warpAffine(croppedImage, rotationMat, croppedImage.shape[1::-1], flags=cv2.INTER_LINEAR)
     showImage = croppedImage.copy()
+
+    #Grid Lines!
+    for i in range(6):
+        cv2.line(showImage, (i*PIXELSIZE,0), (i*PIXELSIZE,PIXELSIZE*6), (0,255,0), 2)
+        cv2.line(showImage, (0,i*PIXELSIZE), (PIXELSIZE*6,i*PIXELSIZE), (0,255,0), 2)
 
     #Find middle pixel of each one of the ID pixels. We can then check the colour to extract the ID
     # TODO use average value of ID pixel for more reliable ID
@@ -75,6 +84,7 @@ def AR4Decode(image):
             x = int((PIXELSIZE)*(i+1.5))
             y = int((PIXELSIZE)*(j+1.5))
             row.append(croppedImage[x,y])
+             
             cv2.circle(showImage,(x,y), 2, (0,255,0), -1)
         
         pixelValss.append(row)
