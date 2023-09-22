@@ -1,0 +1,1 @@
+from art_detection.art_detection import ArtDetection

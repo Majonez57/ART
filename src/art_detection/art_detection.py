@@ -2,9 +2,8 @@ import rospy
 import numpy as np
 import cv_bridge
 import cv2
-from art_detection.msg import ArtResult, ArtResults
+from art_detection.msg import ArtResult, ArtResults, CameraPoint
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import Point 
 from libart import art
 
 class ArtDetection:
@@ -19,7 +18,7 @@ class ArtDetection:
         }
         # ## Setup subscribers
         self.subscribers = {
-            "image" : rospy.Subscriber(imageTopic, Image, self._onImageReceived)
+            "image" : rospy.Subscriber(imageTopic, Image, self._onImageRecieved)
         }
         
         self.currentImage = None
@@ -65,7 +64,7 @@ class ArtDetection:
         for tagID, corners in data:
             tag = ArtResult()
             tag.tagID = tagID
-            tag.corners = [Point(point[0], point[1], 0) for point in corners]
+            tag.corners = [CameraPoint(point[0], point[1]) for point in corners]
             res.append(tag)
 
         output.results = res

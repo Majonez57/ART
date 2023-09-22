@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+
+import argparse
+from art_detection import ArtDetection
+import pathlib
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Art detects and publisht the information of spotted AR16 tags")
+
+    parser.add_argument('--imageTopic', nargs='?', type=str, default="cv_camera/image_raw", help="The ROS topic which has the image input")
+    parser.add_argument('--rate', nargs='?', type=int, default=60, help="The maximum rate of detection from this node")
+
+    args = parser.parse_args()
+    ArtDetection.main(**vars(args))
