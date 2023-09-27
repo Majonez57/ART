@@ -62,7 +62,6 @@ class ArtDetection:
     def _publishTags(self, data):
         output = ArtResults()
         output.resultsCount = len(data)
-        print(data)
         res = []
         for tagID, corners in data:
 

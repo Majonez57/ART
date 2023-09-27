@@ -12,7 +12,7 @@ while True:
 
     if result:
         
-        art.testFunc(image)
+        art._testFunc(image)
         tags = art.findTags(image)
         for tagvalue, corners in tags:
             
