@@ -14,7 +14,7 @@ class ArtDetection:
         # ## Setup publishers
         self.publishers = {
             "image_with_tags": rospy.Publisher('art/image_with_tags', Image, queue_size=1),
-            "tags": rospy.Publisher('/art/tags', ArtResults)
+            "tags": rospy.Publisher('/art/tags', ArtResults, queue_size=1)
         }
         # ## Setup subscribers
         self.subscribers = {
@@ -25,7 +25,7 @@ class ArtDetection:
         self.runs_since_image = 0 
     
     def _onImageRecieved(self, msg):
-        self.currentImage = msg
+        self.currentImage = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
     
     # Takes an image, runs it through detections
     def _processImage(self):
@@ -40,30 +40,34 @@ class ArtDetection:
         self.runs_since_image = 0
         
         # Get Image and pre-process
-        image = self.bridge.imgmsg_to_cv2(data, desired_encoding='bgr8') # Makes the ROS image work with pyTorch
+        image = self.currentImage
         
         results = art.findTags(image)
 
         # Publish the result
         self._publishImage(results)
+        self._publishTags(results)
 
     def _publishImage(self, data):
         image = self.currentImage
 
         for tagValue, corners in data:
             cv2.polylines(image, [corners], True, (50,0,200), 2)
-            cv2.putText(image, f"{tagValue}", corners[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+            
+            placement = tuple(corners[0])
+            cv2.putText(image, f"{tagValue}", placement, cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
         
         self.publishers["image_with_tags"].publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
 
     def _publishTags(self, data):
         output = ArtResults()
         output.resultsCount = len(data)
-        
+        print(data)
         res = []
         for tagID, corners in data:
+
             tag = ArtResult()
-            tag.tagID = tagID
+            tag.tag_id = tagID
             tag.corners = [CameraPoint(point[0], point[1]) for point in corners]
             res.append(tag)
 

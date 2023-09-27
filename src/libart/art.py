@@ -33,6 +33,7 @@ def findTags(frame, tagSize=FRAMESIZE):
 
 # Decodes the tags ID. Returns value of tag and the Orientation
 def AR4Decode(image):
+
     def calvalue(pixels): #Calculates the total value of the ID in the correct orientation
         total = 0
         for i in range(4):
@@ -42,7 +43,7 @@ def AR4Decode(image):
                     total += 2**(15 - (i*4 + j))
         return total
 
-    ret, image_bw = cv2.threshold(image, 200, 255, cv2.THRESH_BINARY) #Apply threshold for binary image. Result is black/white
+    ret, image_bw = cv2.threshold(image, 170, 255, cv2.THRESH_BINARY) #Apply threshold for binary image. Result is black/white
     white = 255 #Bottom left corner should be white
     border = int(PIXELSIZE*2)
     croppedImage = image_bw[border:FRAMESIZE-border, border:FRAMESIZE-border] #Crop exterior black parts
@@ -62,9 +63,7 @@ def AR4Decode(image):
     elif croppedImage[h, l] == white:
         ori = 90
     else:
-        return None, None   
-    
-    print(ori)
+        return None  
     
     rotationMat = cv2.getRotationMatrix2D((120, 120), ori, 1.0)
     croppedImage = cv2.warpAffine(croppedImage, rotationMat, croppedImage.shape[1::-1], flags=cv2.INTER_LINEAR)
@@ -166,7 +165,58 @@ def findContours(frame):
     for corners in otags:
         if len(corners) == 4:
             area = cv2.contourArea(corners)
-            if 2000 > area > 300:
+            if area > 300:
                 tagCorners.append(corners)
+    
+    return tagCorners
+
+
+def _testFunc(frame): #Debug Function
+    #Convert Input Image to grayscale
+    grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    #Apply Gaussian Blur & Canny Edge Detection
+    blur = cv2.GaussianBlur(grey, (5,5), 0)
+    edge = cv2.Canny(blur, 100, 200)
+    
+    # Use cv2 to find all contours
+    conts, h = cv2.findContours(edge, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    test = frame.copy()
+    cv2.drawContours(test, conts, -1, (0,255,0), 2)
+    cv2.imshow("test1", test)
+
+    # We don't care about contours that are too large, or those that have other countours within them
+    index = []
+    for heirarchy in h[0]:
+        if heirarchy[3] != -1: # If contour has no parents we remove it
+            index.append(heirarchy[3])
+    
+    # Check each contour for viability (How likely it is to be an AR tag)
+    otags = []
+    for i in index:
+        perimeter = cv2.arcLength(conts[i], True) #Perimeter of the Contour
+        
+        #Approximating the contour into a closed polygon
+        accuracy = 0.02*perimeter #2% of perimeter as the maximum approximation
+        innerCorners = cv2.approxPolyDP(conts[i], accuracy, True) 
+        
+        if len(innerCorners) > 4: #If approximation has more than 4 edges it is likely the inner tag shape!
+            #This means that it's parent will be the edges of the whole tag! We repeat as above:
+            OuterPerimeter = cv2.arcLength(conts[i-1], True) #Note the c-1 for the parent
+            OuterAccuracy = 0.02*OuterPerimeter
+            outerCorners = cv2.approxPolyDP(conts[i-1], OuterAccuracy, True) 
+            otags.append(outerCorners)
+    
+    # Just to be sure, we will make sure all our tags have 4 corners, and are no bigger than a experimental constant
+    tagCorners = []
+    for corners in otags:
+        if len(corners) == 4:
+            area = cv2.contourArea(corners)
+            if area > 300:
+                tagCorners.append(corners)
+
+    test2 = frame.copy()
+    cv2.drawContours(test2, tagCorners, -1, (0,255,0), 2)
+    cv2.imshow("test2", test2)
     
     return tagCorners
